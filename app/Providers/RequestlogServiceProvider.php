@@ -2,7 +2,7 @@
 
 namespace App\Providers;
 
-use Illuminate\Support\Facades\Crypt;
+use App\Traits\HeadersTrait;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\ServiceProvider;
 use Carbon\Carbon;
@@ -13,6 +13,7 @@ use stdClass;
 
 class RequestlogServiceProvider extends ServiceProvider
 {
+    use HeadersTrait;
     /**
      * Register services.
      */
@@ -26,61 +27,56 @@ class RequestlogServiceProvider extends ServiceProvider
      */
     public function boot(Request $request)
     {
+        $logDetails = $this->prepareLogDetails($request);
+        $this->sendLogToApi($logDetails);
+    }
+
+    private function prepareLogDetails(Request $request)
+    {
         $time = Carbon::now();
         $formattedTime = $time->format('F jS Y, h:i:s A');
-        $hostname = gethostname();
-        $method = $request->method();
-        $path = $request->path();
-        $ipAddress = $request->ip();
-        $startTime = microtime(true);
-        $duration = round((microtime(true) - $startTime) * 1000, 2);
-        $memoryUsage = memory_get_usage(true) / (1024 * 1024); // in MB
-        $userAgent = $request->header('user-agent');
+        $startTime = $endTime = microtime(true);
+        $duration = round(($endTime - $startTime) * 1000, 2);
+        $memoryUsage = memory_get_usage(true) / (1024 * 1024);
+
         $headers = $request->header();
         $headersObject = new stdClass();
-
         foreach ($headers as $key => $value) {
             $headersObject->{$key} = $value[0];
         }
         $response = Http::get(config('app.url'));
 
         // Log the details
-        $logDetails = ([
+        return [
+            'Request_url' => $request->fullUrl(),
             'Time' => $formattedTime,
-            'Hostname' => $hostname,
-            'Method' => $method,
-            'Path' => $path,
+            'Hostname' => gethostname(),
+            'Method' => $request->method(),
+            'Path' => $request->path(),
             'Status' => $response->status(),
-            'IP Address' => $ipAddress,
+            'IP Address' => $request->ip(),
             'Duration' => "{$duration} ms",
             'Memory usage' => "{$memoryUsage} MB",
-            'User-agent' => $userAgent,
-            'HEADERS'=> $headersObject,
-        ]);
-        $encryptedLogDetails = Crypt::encrypt($logDetails);
-
-        $headers = [
-            'api_key' => config('app.api_key'),
-            'secret_key' => config('app.secret_key'),
-            'Content-Type' => 'application/json'
+            'User-agent' => $request->header('user-agent'),
+            'HEADERS' => $headersObject,
         ];
+    }
+
+    private function sendLogToApi($logDetails)
+    {
+        $headers = $this->getApiHeaders();
+
         $payload = [
-            "request_url" => "/v1/projects",
-            "request_method" => $method,
-            "payload" => "payload(req-body)",
+            "request_url" => $logDetails['Request_url'],
+            "request_method" => $logDetails['Method'],
+            "payload" => 'Payload',
             "tag" => "config",
             "meta" => [
-                "meta" => $encryptedLogDetails,
+                "meta" => $logDetails,
             ]
         ];
-        // $decrypt = Crypt::decrypt($encryptedLogDetails);
-        // dd($decrypt);
-        $response = Http::withHeaders($headers)
-                ->post('https://api.bugatlas.com/v1/logs/api', $payload);
+            $endPoint = 'logs/api';
+        $response = $this->processApiResponse($endPoint, $payload);
         dd(json_decode($response->body()));
-
-        // echo $response->body();
-
-
     }
 }

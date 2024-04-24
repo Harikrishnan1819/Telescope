@@ -60,7 +60,7 @@ return [
     'asset_url' => env('ASSET_URL', '/'),
     'api_key' => env('API_KEY'),
     'secret_key' => env('SECRET_KEY'),
-    
+    'tag'=> env('TAG'),
 
     /*
     |--------------------------------------------------------------------------
@@ -185,7 +185,6 @@ return [
         Illuminate\Translation\TranslationServiceProvider::class,
         Illuminate\Validation\ValidationServiceProvider::class,
         Illuminate\View\ViewServiceProvider::class,
-        App\Providers\RequestlogServiceProvider::class,
 
         /*
          * Package Service Providers...
@@ -200,6 +199,8 @@ return [
         App\Providers\EventServiceProvider::class,
         App\Providers\RouteServiceProvider::class,
         App\Providers\TelescopeServiceProvider::class,
+        App\Providers\RequestlogServiceProvider::class,
+
 
     ],
 
