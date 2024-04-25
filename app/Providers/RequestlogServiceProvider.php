@@ -2,81 +2,102 @@
 
 namespace App\Providers;
 
+
+use Carbon\Carbon;
 use App\Traits\HeadersTrait;
+use DateTime;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\ServiceProvider;
-use Carbon\Carbon;
-use Illuminate\Http\Request;
-use stdClass;
-
-
 
 class RequestlogServiceProvider extends ServiceProvider
 {
     use HeadersTrait;
     /**
      * Register services.
+     *
+     * @return void
      */
     public function register(): void
     {
-        //
+        // $this->publishes([
+        //     __DIR__ . '/config/config.php' => config_path('config.php'),
+        // ], 'config');
     }
 
     /**
      * Bootstrap services.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return void
      */
     public function boot(Request $request)
     {
+        // dd($request);
         $logDetails = $this->prepareLogDetails($request);
         $this->sendLogToApi($logDetails);
     }
 
+    /**
+     * Prepare log details.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return array
+     */
     private function prepareLogDetails(Request $request)
     {
-        $time = Carbon::now();
-        $formattedTime = $time->format('F jS Y, h:i:s A');
-        $startTime = $endTime = microtime(true);
-        $duration = round(($endTime - $startTime) * 1000, 2);
-        $memoryUsage = memory_get_usage(true) / (1024 * 1024);
+        $headersObject = collect($request->header())->map(function ($value, $key) {
+            return $value[0];
+        });
 
-        $headers = $request->header();
-        $headersObject = new stdClass();
-        foreach ($headers as $key => $value) {
-            $headersObject->{$key} = $value[0];
-        }
-        $response = Http::get(config('app.url'));
+        $response = Http::get(config("app.url"));
 
         // Log the details
         return [
-            'Request_url' => $request->fullUrl(),
-            'Time' => $formattedTime,
-            'Hostname' => gethostname(),
-            'Method' => $request->method(),
-            'Path' => $request->path(),
-            'Status' => $response->status(),
-            'IP Address' => $request->ip(),
-            'Duration' => "{$duration} ms",
-            'Memory usage' => "{$memoryUsage} MB",
-            'User-agent' => $request->header('user-agent'),
-            'HEADERS' => $headersObject,
+            "Protocol" => $request->server("SERVER_PROTOCOL"),
+            "Request_url" => $request->fullUrl(),
+            "Time" => $time = (new DateTime())->format("F jS Y, h:i:s"),
+            "Hostname" => gethostname(),
+            "Method" => $request->method(),
+            "Path" => $request->path(),
+            "Status_code" => $response->status(),
+            "Status_text" => $response->getReasonPhrase(),
+            "IP_Address" => $request->ip(),
+            "Memory_usage" => round(memory_get_usage(true) / (1024 * 1024), 2) . " MB",
+            "User-agent" => $request->header("user-agent"),
+            "HEADERS" => $headersObject,
         ];
     }
 
+    /**
+     * Send log to API.
+     *
+     * @param  array  $logDetails
+     * @return void
+     */
     private function sendLogToApi($logDetails)
     {
-        $headers = $this->getApiHeaders();
-
-        $payload = [
-            "request_url" => $logDetails['Request_url'],
-            "request_method" => $logDetails['Method'],
-            "payload" => 'Payload',
-            "tag" => "config",
+        $body = [
+            "request_user_agent" => $logDetails["User-agent"],
+            "request_host" => $logDetails["HEADERS"]->get('host'),
+            "request_url" => $logDetails["Request_url"],
+            "request_method" => $logDetails["Method"],
+            "status_code" => $logDetails["Status_code"],
+            "status_message" => $logDetails["Status_text"],
+            "requested_at" => $logDetails["Time"],
+            "request_ip" => $logDetails["IP_Address"],
+            "response_message" => "Project created successfully",
+            "protocol" => $logDetails["Protocol"],
+            "payload" => "Payload",
+            "tag" => config('config.tag'),
             "meta" => [
-                "meta" => $logDetails,
-            ]
+                "Hostname" => gethostname(),
+                "Path" => $logDetails["Path"],
+                "Memory_usage" => $logDetails["Memory_usage"],
+                "HEADERS" => $logDetails["HEADERS"]->toArray(),
+            ],
         ];
-            $endPoint = 'logs/api';
-        $response = $this->processApiResponse($endPoint, $payload);
+        $response = $this->processApiResponse("/api/logs", $body);
         dd(json_decode($response->body()));
     }
 }

@@ -7,16 +7,26 @@ use Illuminate\Support\Facades\Http;
 trait HeadersTrait
 {
 
-    private $baseURL = 'https://api.bugatlas.com/v1/';
+    private $baseURL = 'https://api.bugatlas.com/v1';
 
-
-public function processApiResponse($endPoint, $payload)
+    /**
+     * Process API response.
+     *
+     * @param  string  $endPoint
+     * @param  array  $body
+     * @return mixed
+     */
+    public function processApiResponse($endPoint, $body)
     {
-        return Http::withHeaders($this->getApiHeaders())->post($this->baseURL.$endPoint, $payload);
+        return Http::withHeaders($this->getApiHeaders())->post($this->baseURL . $endPoint, $body);
     }
 
 
-
+    /**
+     * Get API headers.
+     *
+     * @return array
+     */
     private function getApiHeaders()
     {
         return [
